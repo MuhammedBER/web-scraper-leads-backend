@@ -106,6 +106,7 @@ public class ExtractionService {
                 .name(sourceFile.getName() + typeSuffix)
                 .type(type)
                 .user(user)
+                .parentFile(sourceFile)
                 .build();
 
         return fileRepository.save(extractedFile);

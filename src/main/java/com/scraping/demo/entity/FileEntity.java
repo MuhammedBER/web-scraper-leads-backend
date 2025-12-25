@@ -33,9 +33,29 @@ public class FileEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private FileEntity parentFile;
+
+    @OneToMany(mappedBy = "parentFile", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<FileEntity> childFiles = new ArrayList<>();
+
     @OneToMany(mappedBy = "file", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<UrlEntity> urls = new ArrayList<>();
+
+    @OneToMany(mappedBy = "file", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<EmailEntity> emails = new ArrayList<>();
+
+    @OneToMany(mappedBy = "file", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<PhoneNumberEntity> phoneNumbers = new ArrayList<>();
+
+    @OneToMany(mappedBy = "file", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<SocialMediaEntity> socialMedia = new ArrayList<>();
 
     @CreationTimestamp
     @Column(updatable = false)

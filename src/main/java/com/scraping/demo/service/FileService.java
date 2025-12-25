@@ -84,11 +84,29 @@ public class FileService {
                         .build())
                 .collect(Collectors.toList());
 
+        List<FileDTO> childDTOs = file.getChildFiles().stream()
+                .map(this::mapChildToDTO)
+                .collect(Collectors.toList());
+
         return FileDTO.builder()
                 .id(file.getId())
                 .name(file.getName())
                 .type(file.getType())
+                .parentFileId(file.getParentFile() != null ? file.getParentFile().getId() : null)
                 .urls(urlDTOs)
+                .childFiles(childDTOs)
+                .createdAt(file.getCreatedAt())
+                .updatedAt(file.getUpdatedAt())
+                .build();
+    }
+
+    private FileDTO mapChildToDTO(FileEntity file) {
+        // Limited mapping for children to avoid recursion
+        return FileDTO.builder()
+                .id(file.getId())
+                .name(file.getName())
+                .type(file.getType())
+                .parentFileId(file.getParentFile() != null ? file.getParentFile().getId() : null)
                 .createdAt(file.getCreatedAt())
                 .updatedAt(file.getUpdatedAt())
                 .build();
