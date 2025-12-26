@@ -1,9 +1,6 @@
 package com.scraping.demo.service;
 
-import com.scraping.demo.dto.AuthResponse;
-import com.scraping.demo.dto.LoginRequest;
-import com.scraping.demo.dto.RegisterRequest;
-import com.scraping.demo.dto.UserDTO;
+import com.scraping.demo.dto.*;
 import com.scraping.demo.entity.Role;
 import com.scraping.demo.entity.User;
 import com.scraping.demo.repository.UserRepository;
@@ -13,6 +10,9 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.util.Random;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -21,6 +21,7 @@ public class AuthService {
         private final PasswordEncoder passwordEncoder;
         private final AuthenticationManager authenticationManager;
         private final JwtService jwtService;
+        private final EmailService emailService;
 
         public AuthResponse register(RegisterRequest request) {
                 var user = User.builder()
@@ -61,5 +62,35 @@ public class AuthService {
                                 .token(jwtToken)
                                 .user(userDTO)
                                 .build();
+        }
+
+        public void forgotPassword(ForgotPasswordRequest request) {
+                var user = userRepository.findByEmail(request.getEmail())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                String code = String.format("%06d", new Random().nextInt(999999));
+                user.setPasswordResetCode(code);
+                user.setResetCodeExpiresAt(LocalDateTime.now().plusMinutes(15));
+                userRepository.save(user);
+
+                emailService.sendPasswordResetCode(user.getEmail(), code);
+        }
+
+        public void resetPassword(ResetPasswordRequest request) {
+                var user = userRepository.findByEmail(request.getEmail())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                if (user.getPasswordResetCode() == null || !user.getPasswordResetCode().equals(request.getCode())) {
+                        throw new RuntimeException("Invalid verification code");
+                }
+
+                if (user.getResetCodeExpiresAt().isBefore(LocalDateTime.now())) {
+                        throw new RuntimeException("Verification code has expired");
+                }
+
+                user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+                user.setPasswordResetCode(null);
+                user.setResetCodeExpiresAt(null);
+                userRepository.save(user);
         }
 }

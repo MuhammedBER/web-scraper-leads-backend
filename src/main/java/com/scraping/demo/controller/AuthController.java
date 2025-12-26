@@ -1,11 +1,10 @@
 package com.scraping.demo.controller;
 
-import com.scraping.demo.dto.AuthResponse;
-import com.scraping.demo.dto.LoginRequest;
-import com.scraping.demo.dto.RegisterRequest;
+import com.scraping.demo.dto.*;
 import com.scraping.demo.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,9 +26,24 @@ public class AuthController {
         return ResponseEntity.ok(authService.register(request));
     }
 
-    @PostMapping("/login")
-    @Operation(summary = "User login", description = "Authenticates user and returns JWT token with user details")
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
+    @PostMapping("/authenticate")
+    @Operation(summary = "Login user", description = "Authenticates user and returns JWT token")
+    public ResponseEntity<AuthResponse> login(
+            @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Request password reset", description = "Sends a 6-digit verification code to the user's email")
+    public ResponseEntity<String> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok("Verification code sent to your email");
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Reset password", description = "Resets the user's password using the verification code")
+    public ResponseEntity<String> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok("Password reset successfully");
     }
 }

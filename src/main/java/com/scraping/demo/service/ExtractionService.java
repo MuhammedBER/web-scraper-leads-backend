@@ -23,6 +23,7 @@ public class ExtractionService {
     private final PhoneNumberRepository phoneRepository;
     private final SocialMediaRepository socialMediaRepository;
     private final UserRepository userRepository;
+    private final EmailService emailService;
     private final WebScraperService webScraperService;
 
     @Transactional
@@ -91,7 +92,7 @@ public class ExtractionService {
         userRepository.save(user);
 
         // Build response
-        return ExtractionResponse.builder()
+        ExtractionResponse response = ExtractionResponse.builder()
                 .emailFileId(emailFile != null ? emailFile.getId() : null)
                 .phoneFileId(phoneFile != null ? phoneFile.getId() : null)
                 .socialMediaFileId(socialMediaFile != null ? socialMediaFile.getId() : null)
@@ -103,6 +104,11 @@ public class ExtractionService {
                 .socialMedia(extractedSocialMedia)
                 .message("Extraction completed successfully")
                 .build();
+
+        // Send completion email
+        emailService.sendExtractionCompletionEmail(user.getEmail(), sourceFile.getName());
+
+        return response;
     }
 
     private FileEntity createExtractedFile(FileEntity sourceFile, FileType type, User user) {
