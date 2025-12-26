@@ -21,12 +21,18 @@ public class WebScraperService {
 
     private static final int TIMEOUT_MS = 10000; // 10 seconds timeout
 
-    // Regex patterns
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
-            "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
+            "[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})");
 
     private static final Pattern PHONE_PATTERN = Pattern.compile(
-            "\\+?[0-9]{1,4}?[-.\\s]?\\(?[0-9]{1,3}?\\)?[-.\\s]?[0-9]{1,4}[-.\\s]?[0-9]{1,4}[-.\\s]?[0-9]{1,9}");
+            "\\+[0-9]{1,4}[-.\\s]?\\(?[0-9]{1,3}?\\)?[-.\\s]?[0-9]{1,4}[-.\\s]?[0-9]{1,4}[-.\\s]?[0-9]{1,9}");
+
+    private static final Set<String> COMMON_PROVIDERS = Set.of(
+            "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "protonmail.com",
+            "aol.com", "icloud.com", "mail.com", "zoho.com", "yandex.com", "gmx.com");
+
+    private static final Set<String> BLACKLISTED_PREFIXES = Set.of(
+            "example", "test", "demo", "info", "admin", "support");
 
     /**
      * Fetch page content using Jsoup
@@ -46,32 +52,38 @@ public class WebScraperService {
     }
 
     /**
-     * Extract emails using Jsoup and regex fallback
+     * Extract emails using Jsoup and regex fallback with strict validation
      */
-    public Set<String> extractEmails(String content) {
+    public Set<String> extractEmails(String content, String websiteDomain) {
         Set<String> emails = new HashSet<>();
+        String normalizedDomain = normalizeDomain(websiteDomain);
 
         try {
-            // Try Jsoup first - look for mailto links
             Document doc = Jsoup.parse(content);
+
+            // 1. Extract from mailto: links
             Elements mailtoLinks = doc.select("a[href^=mailto:]");
             for (Element link : mailtoLinks) {
                 String email = link.attr("href").replace("mailto:", "").trim();
-                if (isValidEmail(email)) {
+                // Remove query params like ?subject=...
+                if (email.contains("?")) {
+                    email = email.substring(0, email.indexOf("?"));
+                }
+                if (isValidEmail(email, normalizedDomain)) {
                     emails.add(email.toLowerCase());
                 }
             }
 
-            // Fallback to regex for text content
+            // 2. Fallback to regex for text content
             Matcher matcher = EMAIL_PATTERN.matcher(content);
             while (matcher.find()) {
                 String email = matcher.group().trim();
-                if (isValidEmail(email)) {
+                if (isValidEmail(email, normalizedDomain)) {
                     emails.add(email.toLowerCase());
                 }
             }
 
-            log.info("Extracted {} unique emails", emails.size());
+            log.info("Extracted {} unique validated emails", emails.size());
         } catch (Exception e) {
             log.error("Error extracting emails", e);
         }
@@ -80,17 +92,29 @@ public class WebScraperService {
     }
 
     /**
-     * Extract phone numbers using regex
+     * Extract phone numbers using Jsoup (tel: links) and strict regex (+
+     * international)
      */
     public Set<String> extractPhoneNumbers(String content) {
         Set<String> phones = new HashSet<>();
 
         try {
+            Document doc = Jsoup.parse(content);
+
+            // 1. Extract from tel: links
+            Elements telLinks = doc.select("a[href^=tel:]");
+            for (Element link : telLinks) {
+                String phone = link.attr("href").replace("tel:", "").trim();
+                if (isValidPhone(phone)) {
+                    phones.add(phone);
+                }
+            }
+
+            // 2. Extract international format using regex (must start with +)
             Matcher matcher = PHONE_PATTERN.matcher(content);
             while (matcher.find()) {
                 String phone = matcher.group().trim();
-                // Basic validation - at least 7 digits
-                if (phone.replaceAll("[^0-9]", "").length() >= 7) {
+                if (isValidPhone(phone)) {
                     phones.add(phone);
                 }
             }
@@ -232,8 +256,60 @@ public class WebScraperService {
     }
 
     // Validation methods
-    private boolean isValidEmail(String email) {
-        return email != null && email.contains("@") && email.contains(".") && email.length() > 5;
+    private boolean isValidEmail(String email, String websiteDomain) {
+        if (email == null || !email.contains("@"))
+            return false;
+
+        Matcher matcher = EMAIL_PATTERN.matcher(email);
+        if (!matcher.matches())
+            return false;
+
+        String domain = matcher.group(1).toLowerCase();
+        String prefix = email.split("@")[0].toLowerCase();
+
+        // 1. Check blacklisted prefixes
+        if (BLACKLISTED_PREFIXES.contains(prefix))
+            return false;
+
+        // 2. Check if it's a common provider
+        if (COMMON_PROVIDERS.contains(domain))
+            return true;
+
+        // 3. Check if it matches website domain
+        if (websiteDomain != null && (domain.equals(websiteDomain) || domain.endsWith("." + websiteDomain))) {
+            return true;
+        }
+
+        // If no domain provided, we might want a looser check, but user said "strict"
+        // If domain is unknown, only accept common providers?
+        // User said: "End with the website’s domain OR use a common email provider"
+        return false;
+    }
+
+    private boolean isValidPhone(String phone) {
+        if (phone == null)
+            return false;
+        // Must have at least 7 digits and start with + or have been from tel: link
+        // (The regex already ensures + for non-tel links)
+        String digitsOnly = phone.replaceAll("[^0-9]", "");
+        return digitsOnly.length() >= 7 && digitsOnly.length() <= 15;
+    }
+
+    private String normalizeDomain(String url) {
+        if (url == null || url.isEmpty())
+            return null;
+        try {
+            String domain = url.toLowerCase()
+                    .replace("https://", "")
+                    .replace("http://", "")
+                    .replace("www.", "");
+            if (domain.contains("/")) {
+                domain = domain.substring(0, domain.indexOf("/"));
+            }
+            return domain;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private boolean isValidFacebookUrl(String url) {

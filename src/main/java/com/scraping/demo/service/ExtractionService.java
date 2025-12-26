@@ -22,6 +22,7 @@ public class ExtractionService {
     private final EmailRepository emailRepository;
     private final PhoneNumberRepository phoneRepository;
     private final SocialMediaRepository socialMediaRepository;
+    private final UserRepository userRepository;
     private final WebScraperService webScraperService;
 
     @Transactional
@@ -31,6 +32,12 @@ public class ExtractionService {
                 .orElseThrow(() -> new RuntimeException("File not found or access denied"));
 
         log.info("Starting extraction for file: {} (ID: {})", sourceFile.getName(), sourceFile.getId());
+
+        // Clear previous extraction results for this file (using parentFile context for
+        // thorough cleanup)
+        emailRepository.deleteBySourceFileId(sourceFile.getId());
+        phoneRepository.deleteBySourceFileId(sourceFile.getId());
+        socialMediaRepository.deleteBySourceFileId(sourceFile.getId());
 
         // Create files for extracted data
         FileEntity emailFile = null;
@@ -55,7 +62,7 @@ public class ExtractionService {
                 if (emailFile == null) {
                     emailFile = createExtractedFile(sourceFile, FileType.EMAIL, user);
                 }
-                Set<String> emails = webScraperService.extractEmails(content);
+                Set<String> emails = webScraperService.extractEmails(content, urlEntity.getContent());
                 extractedEmails.addAll(saveEmails(emails, emailFile));
             }
 
@@ -78,6 +85,10 @@ public class ExtractionService {
                 extractedSocialMedia.addAll(saveSocialMedia(socialMedia, socialMediaFile));
             }
         }
+
+        // Increment user's total extractions count
+        user.setTotalExtractions(user.getTotalExtractions() + 1);
+        userRepository.save(user);
 
         // Build response
         return ExtractionResponse.builder()
@@ -205,5 +216,14 @@ public class ExtractionService {
                         .type(s.getType())
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    public ExtractionStatsDTO getStats(User user) {
+        return ExtractionStatsDTO.builder()
+                .totalExtractions(user.getTotalExtractions())
+                .emailsCount(emailRepository.countByFileUserId(user.getId()))
+                .phonesCount(phoneRepository.countByFileUserId(user.getId()))
+                .socialMediaCount(socialMediaRepository.countByFileUserId(user.getId()))
+                .build();
     }
 }

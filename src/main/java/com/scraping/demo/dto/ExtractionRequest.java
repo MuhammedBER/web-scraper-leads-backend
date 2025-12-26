@@ -21,10 +21,10 @@ public class ExtractionRequest {
     @Schema(description = "ID of the file containing URLs to scrape", example = "1")
     private Long fileId;
 
-    @Schema(description = "Whether to extract email addresses", example = "true")
+    @Schema(description = "Whether to extract email addresses (Strict validation: domain match or whitelisted provider)", example = "true")
     private boolean extractEmails;
 
-    @Schema(description = "Whether to extract phone numbers", example = "true")
+    @Schema(description = "Whether to extract phone numbers (Strict validation: tel: links or + prefix)", example = "true")
     private boolean extractPhones;
 
     @Schema(description = "List of social media platforms to target", example = "[\"FACEBOOK\", \"INSTAGRAM\"]")

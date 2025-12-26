@@ -50,4 +50,11 @@ public class ExtractionController {
                 SecurityUtils.getCurrentUser());
         return ResponseEntity.ok(socialMedia);
     }
+
+    @GetMapping("/stats")
+    @Operation(summary = "Get extraction statistics", description = "Returns a summary of all extraction activity for the authenticated user")
+    public ResponseEntity<ExtractionStatsDTO> getStats() {
+        ExtractionStatsDTO stats = extractionService.getStats(SecurityUtils.getCurrentUser());
+        return ResponseEntity.ok(stats);
+    }
 }
