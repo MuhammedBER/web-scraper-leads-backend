@@ -46,4 +46,15 @@ public class AuthController {
         authService.resetPassword(request);
         return ResponseEntity.ok("Password reset successfully");
     }
+
+    @PostMapping("/verify-reset-code")
+    @Operation(summary = "Verify reset code", description = "Checks if the 6-digit verification code is valid and not expired")
+    public ResponseEntity<java.util.Map<String, String>> verifyResetCode(
+            @Valid @RequestBody VerifyResetCodeRequest request) {
+        authService.verifyResetCode(request);
+        java.util.Map<String, String> response = new java.util.HashMap<>();
+        response.put("status", "success");
+        response.put("message", "Verification code is valid");
+        return ResponseEntity.ok(response);
+    }
 }

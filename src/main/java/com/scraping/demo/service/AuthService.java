@@ -93,4 +93,17 @@ public class AuthService {
                 user.setResetCodeExpiresAt(null);
                 userRepository.save(user);
         }
+
+        public void verifyResetCode(VerifyResetCodeRequest request) {
+                var user = userRepository.findByEmail(request.getEmail())
+                                .orElseThrow(() -> new RuntimeException("User not found"));
+
+                if (user.getPasswordResetCode() == null || !user.getPasswordResetCode().equals(request.getCode())) {
+                        throw new RuntimeException("Invalid verification code");
+                }
+
+                if (user.getResetCodeExpiresAt().isBefore(LocalDateTime.now())) {
+                        throw new RuntimeException("Verification code has expired");
+                }
+        }
 }
