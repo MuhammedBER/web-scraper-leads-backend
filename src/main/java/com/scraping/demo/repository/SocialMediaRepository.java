@@ -15,6 +15,10 @@ public interface SocialMediaRepository extends JpaRepository<SocialMediaEntity, 
 
     void deleteByFileId(Long fileId);
 
+    @Modifying
+    @Transactional
+    void deleteByFileIdAndType(Long fileId, com.scraping.demo.entity.SocialMediaType type);
+
     long countByFileUserId(Long userId);
 
     @Modifying

@@ -23,9 +23,16 @@ public class ExtractionController {
     private final ExtractionService extractionService;
 
     @PostMapping("/extract")
-    @Operation(summary = "Extract data from URLs", description = "Extracts emails, phone numbers, and social media from URLs in a file")
+    @Operation(summary = "Extract data from URLs", description = "Extracts emails, phone numbers, and social media from URLs in a file. \n\n"
+            +
+            "**Replacement Policy:** \n" +
+            "- Re-extracting EMAILS replaces old email records for this file. \n" +
+            "- Re-extracting PHONES replaces old phone records for this file. \n" +
+            "- Re-extracting a specific SOCIAL_MEDIA platform (e.g., FACEBOOK) replaces only records for that platform. \n"
+            +
+            "- Other types remain untouched.")
     public ResponseEntity<ExtractionResponse> extractData(@Valid @RequestBody ExtractionRequest request) {
-        ExtractionResponse response = extractionService.extractData(request, SecurityUtils.getCurrentUser());
+        ExtractionResponse response = extractionService.extractDataSelective(request, SecurityUtils.getCurrentUser());
         return ResponseEntity.ok(response);
     }
 

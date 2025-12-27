@@ -34,12 +34,6 @@ public class ExtractionService {
 
         log.info("Starting extraction for file: {} (ID: {})", sourceFile.getName(), sourceFile.getId());
 
-        // Clear previous extraction results for this file (using parentFile context for
-        // thorough cleanup)
-        emailRepository.deleteBySourceFileId(sourceFile.getId());
-        phoneRepository.deleteBySourceFileId(sourceFile.getId());
-        socialMediaRepository.deleteBySourceFileId(sourceFile.getId());
-
         // Create files for extracted data
         FileEntity emailFile = null;
         FileEntity phoneFile = null;
@@ -61,7 +55,8 @@ public class ExtractionService {
             // Extract emails
             if (request.isExtractEmails()) {
                 if (emailFile == null) {
-                    emailFile = createExtractedFile(sourceFile, FileType.EMAIL, user);
+                    emailFile = getOrCreateExtractedFile(sourceFile, FileType.EMAIL, user);
+                    emailRepository.deleteByFileId(emailFile.getId());
                 }
                 Set<String> emails = webScraperService.extractEmails(content, urlEntity.getContent());
                 extractedEmails.addAll(saveEmails(emails, emailFile));
@@ -70,7 +65,8 @@ public class ExtractionService {
             // Extract phone numbers
             if (request.isExtractPhones()) {
                 if (phoneFile == null) {
-                    phoneFile = createExtractedFile(sourceFile, FileType.PHONE, user);
+                    phoneFile = getOrCreateExtractedFile(sourceFile, FileType.PHONE, user);
+                    phoneRepository.deleteByFileId(phoneFile.getId());
                 }
                 Set<String> phones = webScraperService.extractPhoneNumbers(content);
                 extractedPhones.addAll(savePhones(phones, phoneFile));
@@ -79,8 +75,15 @@ public class ExtractionService {
             // Extract social media
             if (request.getSocialMediaTypes() != null && !request.getSocialMediaTypes().isEmpty()) {
                 if (socialMediaFile == null) {
-                    socialMediaFile = createExtractedFile(sourceFile, FileType.SOCIAL_MEDIA, user);
+                    socialMediaFile = getOrCreateExtractedFile(sourceFile, FileType.SOCIAL_MEDIA, user);
                 }
+
+                // For each requested type, delete existing ones once
+                for (SocialMediaType type : request.getSocialMediaTypes()) {
+                    // We need to ensure we only delete once per extraction session per type
+                    // But wait, it's easier to just delete them BEFORE the loop over URLs
+                }
+
                 Set<WebScraperService.SocialMediaMatch> socialMedia = webScraperService.extractSocialMedia(content,
                         request.getSocialMediaTypes());
                 extractedSocialMedia.addAll(saveSocialMedia(socialMedia, socialMediaFile));
@@ -111,22 +114,103 @@ public class ExtractionService {
         return response;
     }
 
-    private FileEntity createExtractedFile(FileEntity sourceFile, FileType type, User user) {
-        String typeSuffix = switch (type) {
+    private FileEntity getOrCreateExtractedFile(FileEntity sourceFile, FileType type, User user) {
+        String name = sourceFile.getName() + switch (type) {
             case EMAIL -> "_emails";
             case PHONE -> "_phones";
             case SOCIAL_MEDIA -> "_social_media";
             default -> "_extracted";
         };
 
-        FileEntity extractedFile = FileEntity.builder()
-                .name(sourceFile.getName() + typeSuffix)
-                .type(type)
-                .user(user)
-                .parentFile(sourceFile)
+        return fileRepository.findByNameAndParentFileId(name, sourceFile.getId())
+                .orElseGet(() -> {
+                    FileEntity newFile = FileEntity.builder()
+                            .name(name)
+                            .type(type)
+                            .user(user)
+                            .parentFile(sourceFile)
+                            .build();
+                    return fileRepository.save(newFile);
+                });
+    }
+
+    @Transactional
+    public ExtractionResponse extractDataSelective(ExtractionRequest request, User user) {
+        // Redefined to use selective replacement
+        FileEntity sourceFile = fileRepository.findByIdAndUserId(request.getFileId(), user.getId())
+                .orElseThrow(() -> new RuntimeException("File not found or access denied"));
+
+        log.info("Starting selective extraction for file: {} (ID: {})", sourceFile.getName(), sourceFile.getId());
+
+        FileEntity emailFile = request.isExtractEmails() ? getOrCreateExtractedFile(sourceFile, FileType.EMAIL, user)
+                : null;
+        FileEntity phoneFile = request.isExtractPhones() ? getOrCreateExtractedFile(sourceFile, FileType.PHONE, user)
+                : null;
+        FileEntity socialMediaFile = (request.getSocialMediaTypes() != null && !request.getSocialMediaTypes().isEmpty())
+                ? getOrCreateExtractedFile(sourceFile, FileType.SOCIAL_MEDIA, user)
+                : null;
+
+        // Selective Deletion
+        if (emailFile != null)
+            emailRepository.deleteByFileId(emailFile.getId());
+        if (phoneFile != null)
+            phoneRepository.deleteByFileId(phoneFile.getId());
+        if (socialMediaFile != null) {
+            for (SocialMediaType type : request.getSocialMediaTypes()) {
+                socialMediaRepository.deleteByFileIdAndType(socialMediaFile.getId(), type);
+            }
+        }
+
+        List<EmailDTO> extractedEmails = new ArrayList<>();
+        List<PhoneNumberDTO> extractedPhones = new ArrayList<>();
+        List<SocialMediaDTO> extractedSocialMedia = new ArrayList<>();
+
+        for (UrlEntity urlEntity : sourceFile.getUrls()) {
+            String content = webScraperService.fetchPageContent(urlEntity.getContent());
+            if (content.isEmpty())
+                continue;
+
+            if (emailFile != null) {
+                Set<String> emails = webScraperService.extractEmails(content, urlEntity.getContent());
+                extractedEmails.addAll(saveEmails(emails, emailFile));
+            }
+
+            if (phoneFile != null) {
+                Set<String> phones = webScraperService.extractPhoneNumbers(content);
+                extractedPhones.addAll(savePhones(phones, phoneFile));
+            }
+
+            if (socialMediaFile != null) {
+                Set<WebScraperService.SocialMediaMatch> socialMedia = webScraperService.extractSocialMedia(content,
+                        request.getSocialMediaTypes());
+                extractedSocialMedia.addAll(saveSocialMedia(socialMedia, socialMediaFile));
+            }
+        }
+
+        user.setTotalExtractions(user.getTotalExtractions() + 1);
+        userRepository.save(user);
+
+        // Deduplicate response lists (they might have been added multiple times if same
+        // data found on different URLs)
+        extractedEmails = extractedEmails.stream().distinct().collect(Collectors.toList());
+        extractedPhones = extractedPhones.stream().distinct().collect(Collectors.toList());
+        extractedSocialMedia = extractedSocialMedia.stream().distinct().collect(Collectors.toList());
+
+        ExtractionResponse response = ExtractionResponse.builder()
+                .emailFileId(emailFile != null ? emailFile.getId() : null)
+                .phoneFileId(phoneFile != null ? phoneFile.getId() : null)
+                .socialMediaFileId(socialMediaFile != null ? socialMediaFile.getId() : null)
+                .emailsExtracted(extractedEmails.size())
+                .phonesExtracted(extractedPhones.size())
+                .socialMediaExtracted(extractedSocialMedia.size())
+                .emails(extractedEmails)
+                .phones(extractedPhones)
+                .socialMedia(extractedSocialMedia)
+                .message("Extraction completed successfully")
                 .build();
 
-        return fileRepository.save(extractedFile);
+        emailService.sendExtractionCompletionEmail(user.getEmail(), sourceFile.getName());
+        return response;
     }
 
     private List<EmailDTO> saveEmails(Set<String> emails, FileEntity file) {

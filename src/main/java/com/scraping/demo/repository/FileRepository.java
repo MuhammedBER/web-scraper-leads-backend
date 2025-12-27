@@ -10,4 +10,6 @@ public interface FileRepository extends JpaRepository<FileEntity, Long> {
     List<FileEntity> findByUserId(Long userId);
 
     Optional<FileEntity> findByIdAndUserId(Long id, Long userId);
+
+    Optional<FileEntity> findByNameAndParentFileId(String name, Long parentFileId);
 }
