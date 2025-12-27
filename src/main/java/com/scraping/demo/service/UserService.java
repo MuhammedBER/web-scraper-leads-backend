@@ -4,6 +4,7 @@ import com.scraping.demo.dto.*;
 import com.scraping.demo.entity.User;
 import com.scraping.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +14,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
 
     private final UserRepository userRepository;
@@ -69,21 +71,32 @@ public class UserService {
         User user = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new RuntimeException("User profile not found"));
 
-        // Check if email is provided, being changed, and if new email already exists
-        if (request.getEmail() != null && !user.getEmail().equals(request.getEmail())) {
-            if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-                throw new RuntimeException("Email already in use");
+        if (request.getEmail() != null) {
+            if (request.getEmail().trim().isEmpty()) {
+                throw new RuntimeException("Email cannot be empty");
             }
-            user.setEmail(request.getEmail());
+            if (!user.getEmail().equals(request.getEmail())) {
+                if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+                    throw new RuntimeException("Email already in use");
+                }
+                user.setEmail(request.getEmail());
+            }
         }
 
         if (request.getFirstName() != null) {
+            if (request.getFirstName().trim().isEmpty()) {
+                throw new RuntimeException("First name cannot be empty");
+            }
             user.setFirstName(request.getFirstName());
         }
         if (request.getLastName() != null) {
+            if (request.getLastName().trim().isEmpty()) {
+                throw new RuntimeException("Last name cannot be empty");
+            }
             user.setLastName(request.getLastName());
         }
 
+        log.info("User {} updated their profile", user.getEmail());
         return mapToDTO(userRepository.save(user));
     }
 
@@ -93,11 +106,23 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            log.warn("Failed password change attempt for user {}", user.getEmail());
             throw new RuntimeException("Invalid old password");
         }
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+        log.info("User {} successfully changed their password", user.getEmail());
+    }
+
+    @Transactional
+    public void deleteAccount(User currentUser) {
+        User user = userRepository.findById(currentUser.getId())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        log.info("User {} is deleting their account", user.getEmail());
+        userRepository.delete(user);
+        log.info("Account for user {} has been removed", user.getEmail());
     }
 
     private UserDTO mapToDTO(User user) {

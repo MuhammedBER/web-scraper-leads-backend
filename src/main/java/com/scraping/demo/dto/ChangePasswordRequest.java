@@ -19,6 +19,7 @@ public class ChangePasswordRequest {
     private String oldPassword;
 
     @NotBlank(message = "New password is required")
-    @Schema(description = "The user's new desired password", example = "newSecurePassword456")
+    @jakarta.validation.constraints.Size(min = 8, message = "New password must be at least 8 characters")
+    @Schema(description = "The user's new desired password (min 8 chars)", example = "newSecurePassword456")
     private String newPassword;
 }

@@ -15,9 +15,11 @@ import lombok.NoArgsConstructor;
 public class UserSelfUpdateRequest {
 
     @Schema(description = "User's first name (optional)", example = "Johnny", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+    @jakarta.validation.constraints.Size(min = 2, message = "First name must be at least 2 characters")
     private String firstName;
 
     @Schema(description = "User's last name (optional)", example = "Doe", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+    @jakarta.validation.constraints.Size(min = 2, message = "Last name must be at least 2 characters")
     private String lastName;
 
     @jakarta.validation.constraints.Email(message = "Valid email is required")

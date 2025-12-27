@@ -26,7 +26,7 @@ public class AuthController {
         return ResponseEntity.ok(authService.register(request));
     }
 
-    @PostMapping("/authenticate")
+    @PostMapping("/login")
     @Operation(summary = "Login user", description = "Authenticates user and returns JWT token")
     public ResponseEntity<AuthResponse> login(
             @RequestBody LoginRequest request) {
