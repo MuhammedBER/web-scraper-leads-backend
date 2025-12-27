@@ -16,6 +16,9 @@ import java.util.List;
 @Schema(description = "DTO representing a user")
 public class UserDTO {
 
+    @Schema(description = "User's unique ID", example = "1")
+    private Long id;
+
     @Schema(description = "User's first name", example = "John")
     private String firstName;
 
